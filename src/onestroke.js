@@ -1,16 +1,20 @@
 import './lib/pixi.min'
+import './lib/utils'
 
 export default class OneStroke {
     constructor(config) {
         let { lineColor, vertexColor, strokeColor, activeVertexColor, lines } = config
-        this.app = PIXI.autoDetectRenderer(375,603,
-            {
+        this.app = new PIXI.Application(
+			{
+				width: 375, 
+				height: 603, 
+				antialias: true, 
 				transparent: true
 			}
-        )
+		)
         this.view = document.getElementById('onestroke')
         this.view.appendChild(this.app.view)
-        this.stage = new PIXI.Container()
+        this.stage = this.app.stage
         this.lines = []
         this.nodes = []
         this.validNodes = []
@@ -30,17 +34,16 @@ export default class OneStroke {
         this.initStroke(lines)
         this.initBoard()
         this.getValidNodes()
-        this.render()
 
         this.touchstart = 'touchstart' || 'mousedown'
         this.touchmove = 'touchmove' || 'mousemove'
         this.touchend = 'touchend' || 'mouseup'
         this.touchstartHandle = this.touchstartHandle.bind(this)
         this.touchmoveHandle = this.touchmoveHandle.bind(this)
-        // this.touchendHandle = this.touchendHandle.bind(this)
+        this.touchendHandle = this.touchendHandle.bind(this)
         this.view.addEventListener(this.touchstart, this.touchstartHandle)
         this.view.addEventListener(this.touchmove, this.touchmoveHandle)
-        // this.view.addEventListener(this.touchend, this.touchendHandle)
+        this.view.addEventListener(this.touchend, this.touchendHandle)
     }
 
     initStroke(lines) {
@@ -70,7 +73,7 @@ export default class OneStroke {
     }
 
     initBoard() {
-        this.baseLines = this.lines.map(({ x1, x2, y1, y2 }) => {
+        this.baseLines = [this.lines.map(({ x1, x2, y1, y2 }) => {
             let line = new PIXI.Graphics()
                 .lineStyle(this.lineWidth, this.lineColor, 1)
                 .moveTo(x1, y1)
@@ -78,7 +81,7 @@ export default class OneStroke {
                 .closePath()
             this.stage.addChild(line)
             return line
-        })
+        })]
         this.baseNodes = this.nodes.map(({ x, y }) => {
             let node = new PIXI.Graphics()
                 .beginFill(this.vertexColor, 1)
@@ -115,10 +118,6 @@ export default class OneStroke {
         return false
     }
 
-    render() {
-		this.app.render(this.stage)
-    }
-
     touchstartHandle(e) {
         if (this.touchstart === 'touchstart') {
             var {pageX: x, pageY: y} = e.touches[0]
@@ -128,16 +127,35 @@ export default class OneStroke {
         this.finger = { x, y }
         if (this.currStroke) {
             this.drawLine()
+            if (this.check(x, y)) {
+                this.setCurrNode(this.check(x, y))
+            }
         } else {
             if (this.check(x, y)) {
-                this.currNode = this.check(x, y)
-                console.log(this.check(x, y))
+                this.setCurrNode(this.check(x, y))
             }
         }
     }
 
     touchmoveHandle(e) {
-        
+        if (this.touchstart === 'touchstart') {
+            var {pageX: x, pageY: y} = e.touches[0]
+        } else {
+            var {clientX: x, clientY: y} = e
+        }
+        this.finger = { x, y }
+        if (this.currStroke || this.currNode) {
+            this.drawLine()
+            if (this.check(x, y)) {
+                this.setCurrNode(this.check(x, y))
+            }
+        }
+    }
+
+    touchendHandle() {
+        if (!this.currStroke) {
+            this.currNode = null
+        }
     }
 
     check(x, y) {
@@ -150,6 +168,33 @@ export default class OneStroke {
             }
         }
         return false
+    }
+
+    drawLine() {
+        let { x, y } = this.finger
+        let points = this.currStroke.graphicsData[0].shape.points
+        points[2] = x
+        points[3] = y
+        console.log(points)
+    }
+
+    setCurrNode(curr) {
+        let { x, y } = this.currNode = curr
+        this.validNodes = this.currNode.validNodes
+        let node = new PIXI.Graphics()
+            .beginFill(this.activeVertexColor, 1)
+            .drawCircle(0, 0, this.vertexRadius)
+        node.x = x
+        node.y = y
+        this.stage.addChild(node)
+
+        this.currStroke = new PIXI.Graphics()
+            .lineStyle(this.lineWidth, this.strokeColor, 1)
+            .moveTo(x, y)
+            .lineTo(x, y)
+            .closePath()
+        this.stage.addChild(this.currStroke)
+        this.stage.setChildIndex(this.currStroke, this.baseLines.length)
     }
 }
 
